@@ -2,30 +2,17 @@ import json
 import click
 import logging
 import numpy as np
-import pandas as pd
 
-from whatever import (
+from optimizer import AuctionGroups, Optimizer
+from winbid import (
     generate_winbid_samples,
-    winbid_prob_from_samples,
-    winbid_prob_analytical,
-    optimize,
-    AuctionGroups)
+    aucwin_prob_from_samples,
+    aucwin_prob_analytical)
 
 logging.basicConfig(
     level=logging.INFO,
     format='[%(asctime)s] - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-
-# TODO:
-def get_summary(res, dist_params_list, pc, N):
-    df = pd.DataFrame(index=pd.Index(np.arange(len(N))))
-    df['x'] = res.x
-    df['dist_params'] = dist_params_list
-    df['dist_params'] = df['dist_params'].map(str)
-    df['N_group'] = N
-    df['p_ctr'] = pc
-    return df
 
 
 @click.group()
@@ -35,16 +22,16 @@ def cli():
 
 @cli.command()
 @click.option(
-    '--auction-groups',
+    '--winbid-dist',
     type=str,
     default=
     '['
-    '{"p_ctr": 0.005, "n": 100000, "dist": {"dist_type": "exponpow", "dist_args": {"b": 2}, "samples": 10000}},'
-    '{"p_ctr": 0.010, "n":  50000, "dist": {"dist_type": "exponpow", "dist_args": {"b": 2}, "samples": 10000}},'
-    '{"p_ctr": 0.005, "n": 100000, "dist": {"dist_type": "exponpow", "dist_args": {"b": 4}, "samples": 10000}},'
-    '{"p_ctr": 0.010, "n":  20000, "dist": {"dist_type": "exponpow", "dist_args": {"b": 4}, "samples": 10000}},'
-    '{"p_ctr": 0.005, "n": 200000, "dist": {"dist_type": "exponpow", "dist_args": {"b": 6}, "samples": 10000}},'
-    '{"p_ctr": 0.010, "n":  60000, "dist": {"dist_type": "exponpow", "dist_args": {"b": 6}, "samples": 10000}}'
+    '{"dist_type": "exponpow", "dist_args": {"b": 2}, "samples": 10000},'
+    '{"dist_type": "exponpow", "dist_args": {"b": 2}, "samples": 10000},'
+    '{"dist_type": "exponpow", "dist_args": {"b": 4}, "samples": 10000},'
+    '{"dist_type": "exponpow", "dist_args": {"b": 4}, "samples": 10000},'
+    '{"dist_type": "exponpow", "dist_args": {"b": 6}, "samples": 10000},'
+    '{"dist_type": "exponpow", "dist_args": {"b": 6}, "samples": 10000}'
     ']',
     help='Combinations of CTR probabilities, expected number of incoming '
          'requests, and auction winning bid distributions')
@@ -53,20 +40,15 @@ def cli():
     type=str,
     default='data.json',
     help='Path to store the generated data')
-def generate_data(auction_groups, save_path):
-    """ Generate win-bid samples for different ad-auction groups """
+def generate_data(winbid_dist, save_path):
+    """ Generate win-bid samples for different ad-auction gr """
 
-    auction_groups = json.loads(auction_groups)
+    winbid_dist = json.loads(winbid_dist)
 
-    logger.info(f'Generate data for the following auction groups:\n{auction_groups}')
+    logger.info(f'Generate data for the following distributions:\n{winbid_dist}')
 
-    # p_ctr: CTR probabilities
-    # n: expected number of incoming requests
-    # winbid_samples: samples from the win-bid distribution
-    data = [{'p_ctr': ac['p_ctr'],
-             'n': ac['n'],
-             'winbid_samples': generate_winbid_samples(**ac['dist'])}
-            for ac in auction_groups]
+    data = [{'winbid_samples': generate_winbid_samples(**dist)}
+            for dist in winbid_dist]
 
     logger.info(f'Store data in {save_path}.')
     with open(save_path, "w") as f:
@@ -75,94 +57,94 @@ def generate_data(auction_groups, save_path):
 
 @cli.command()
 @click.option(
-    '--data-path',
-    type=str,
-    default='data.json',
-    help='Path where information for different auction groups is stored')
-@click.option(
     '--n-click',
     type=float,
     default=100.,
     help='Desired number of user ad clicks')
-def optimize_from_sample_date(data_path, n_click):
-    """ Use empirical data for different auction types to construct an optimal
-    bidding strategy """
-
-    with open(data_path, "r") as f:
-        data = json.load(f)
-
-    logger.info(f'Loaded data for {len(data)} auction types.')
-
-    # Click-through probabilities
-    p_ctr = np.array([x['p_ctr'] for x in data])
-
-    # Expected number of auctions per auction type
-    n = np.array([x['n'] for x in data])
-
-    # Fn that maps bids for different auction types to winning probabilities
-    p_win_fn = winbid_prob_from_samples(
-        samples_groups=[np.array(x['winbid_samples']) for x in data])
-
-    # Expected number of clicks if we win every auction
-    nc_max = (n * p_ctr).sum()
-
-    assert n_click < nc_max, "The desired amount of clicks is lower than the " \
-                             "expected number of clicks if we win every auction"
-
-    # Initial value
-    x0 = np.ones_like(p_ctr) * .001
-    res = optimize(x0=x0, p_win_fn=p_win_fn, p_ctr=p_ctr, n=n, n_click=n_click)
-
-
-@cli.command()
 @click.option(
-    '--auction-groups',
+    '--p-ctr',
+    type=str,
+    default='0.005, 0.010, 0.005, 0.010, 0.005, 0.010',
+    help='Click-through probabilities per auction group')
+@click.option(
+    '--n',
+    type=str,
+    default='100_000, 50_000, 100_000, 20_000, 200_000, 60_000',
+    help='Expected number of auctions per auction group')
+@click.option(
+    '--winbid-dist',
     type=str,
     default=
     '['
-    '{"p_ctr": 0.005, "n": 100000, "dist": {"dist_type": "exponpow", "dist_args": {"b": 2}}},'
-    '{"p_ctr": 0.010, "n":  50000, "dist": {"dist_type": "exponpow", "dist_args": {"b": 2}}},'
-    '{"p_ctr": 0.005, "n": 100000, "dist": {"dist_type": "exponpow", "dist_args": {"b": 4}}},'
-    '{"p_ctr": 0.010, "n":  20000, "dist": {"dist_type": "exponpow", "dist_args": {"b": 4}}},'
-    '{"p_ctr": 0.005, "n": 200000, "dist": {"dist_type": "exponpow", "dist_args": {"b": 6}}},'
-    '{"p_ctr": 0.010, "n":  60000, "dist": {"dist_type": "exponpow", "dist_args": {"b": 6}}}'
+    '{"dist_type": "exponpow", "dist_args": {"b": 2}},'
+    '{"dist_type": "exponpow", "dist_args": {"b": 2}},'
+    '{"dist_type": "exponpow", "dist_args": {"b": 4}},'
+    '{"dist_type": "exponpow", "dist_args": {"b": 4}},'
+    '{"dist_type": "exponpow", "dist_args": {"b": 6}},'
+    '{"dist_type": "exponpow", "dist_args": {"b": 6}}'
     ']',
-    help='Combinations of CTR probabilities, expected number of incoming '
-         'requests, and auction winning bid distributions')
+    help=
+    'Winning bid distributions per auction group. Depending on the '
+    '`analytical` flag, it is either a json string with the definitions of '
+    'the winbid distributions (flag used) or a path where samples for every '
+    'auction group are stored (no flag).')
 @click.option(
-    '--n-click',
-    type=float,
-    default=100.,
-    help='Desired number of user ad clicks')
-def optimize_from_analytical_dists(auction_groups, n_click):
-    """ Use known distributions for different auction types to construct an optimal
+    '--winbid-dist-analytical', '-a',
+    is_flag=True,
+    help="Whether we define win-bid dists diretly by analytical functions or "
+         "we infer them by looking at samples from the distributions.")
+def optimize(n_click, p_ctr, n, winbid_dist, winbid_dist_analytical):
+    """ Use empirical data for different auction types to construct an optimal
     bidding strategy """
 
-    data = json.loads(auction_groups)
+    if winbid_dist_analytical:
+        logger.info(f'Use the explicitly defined win-bid distributions: {winbid_dist}')
+
+        # Fn that maps bids for different auction types to winning probabilities
+        p_win_fn = aucwin_prob_analytical(dists=json.loads(winbid_dist))
+    else:
+        logger.info(f'Load samples of the win-bid distributions from: {winbid_dist}')
+
+        with open(winbid_dist, "r") as f:
+            data = json.load(f)
+
+        # Fn that maps bids for different auction types to winning probabilities
+        p_win_fn = aucwin_prob_from_samples(
+            samples_groups=[np.array(x['winbid_samples']) for x in data])
 
     # Click-through probabilities
-    p_ctr = np.array([x['p_ctr'] for x in data])
+    p_ctr = np.array([float(x) for x in p_ctr.split(',')])
 
     # Expected number of auctions per auction type
-    n = np.array([x['n'] for x in data])
+    n = np.array([float(x) for x in n.split(',')])
 
-    # Fn that maps bids for different auction types to winning probabilities
-    p_win_fn = winbid_prob_analytical(dists=[x['dist'] for x in data])
-
-    # Expected number of clicks if we win every auction
-    nc_max = (n * p_ctr).sum()
-
-    assert n_click < nc_max, "The desired amount of clicks is lower than the " \
-                             "expected number of clicks if we win every auction"
-
-    # Initial value
-    x0 = np.ones_like(p_ctr) * .001
-    res = optimize(x0=x0, p_win_fn=p_win_fn, p_ctr=p_ctr, n=n, n_click=n_click)
+    groups = AuctionGroups(p_ctr=p_ctr, n=n, p_win_fn=p_win_fn)
+    optimizer = Optimizer(groups=groups, n_click=n_click)
+    res = optimizer.optimize()
 
 
 if __name__ == "__main__":
     """
     PYTHONPATH=src python src/main.py --help
+
+    # Infer winbid distributions from samples from different ad-auction gr
+    PYTHONPATH=src python src/main.py generate-data --save-path='data.json'
+    PYTHONPATH=src python src/main.py optimize --winbid-dist='data.json'
+        
+    # Define winbid distributions explicitly
+    PYTHONPATH=src python src/main.py optimize \
+      --n-click=100 \
+      --p-ctr='0.01, 0.02' \
+      --n='20_000, 10_000' \
+      --winbid-dist='[{"dist_type": "exponpow", "dist_args": {"b": 2}}, {"dist_type": "exponpow", "dist_args": {"b": 2}}]' \
+      --winbid-dist-analytical
+
+
+
+    PYTHONPATH=src python src/main.py optimize --winbid-dist='data.json'
+
+    # Define winbid distributions explicitly
+    PYTHONPATH=src python src/main.py optimize --winbid-dist-analytical
     
     PYTHONPATH=$(pwd) python src/main.py optimize \
         --model_wrapper=ModelPDF \

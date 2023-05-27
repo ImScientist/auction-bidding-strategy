@@ -1,6 +1,7 @@
 import logging
 import numpy as np
-from scipy.optimize import minimize
+import matplotlib.pyplot as plt
+from scipy.optimize import minimize, Bounds
 from typing import Callable
 from pydantic import BaseModel, root_validator
 
@@ -12,26 +13,26 @@ class AuctionGroups(BaseModel):
 
     :param p_ctr: click-through probabilities per auction group
     :param n: expected number of auctions per auction group
-    :param p_win_fn: function that maps bids for the different auction groups
-        to winning bid probabilities
+    :param p_aucwin_fn: function that maps bids for the different auction
+        groups to probabilities to win an auction
     """
 
     p_ctr: np.ndarray
     n: np.ndarray
-    p_win_fn: Callable[[np.ndarray], np.ndarray]
+    p_aucwin_fn: Callable[[np.ndarray], np.ndarray]
 
     class Config:  # noqa
         arbitrary_types_allowed = True
 
     @root_validator
     def check_dimensions_match(cls, v):  # noqa
-        p_ctr, n, p_win_fn = v.get('p_ctr'), v.get('n'), v.get('p_win_fn')
+        p_ctr, n, p_aucwin_fn = v.get('p_ctr'), v.get('n'), v.get('p_aucwin_fn')
 
         x = np.zeros_like(n)
 
-        assert p_ctr.ndim == n.ndim == p_win_fn(x).ndim == 1
+        assert p_ctr.ndim == n.ndim == p_aucwin_fn(x).ndim == 1
 
-        assert len(p_ctr) == len(n) == len(p_win_fn(x))
+        assert len(p_ctr) == len(n) == len(p_aucwin_fn(x))
 
         assert ((0 <= p_ctr) & (p_ctr <= 1)).all(), \
             "Click-through probabilities should be btw 0 and 1"
@@ -41,63 +42,171 @@ class AuctionGroups(BaseModel):
 
         return v
 
+    @property
+    def n_groups(self) -> int:
+        """ Number of ad-auction groups """
+        return len(self.n)
+
+    def plot(
+            self,
+            x_range: tuple[float, float] = (0., 5.),
+            const: np.ndarray = None,
+            const_label: str = None
+    ):
+        """ Plot winbid probabilities and distributions for all auction groups
+        """
+
+        dim = self.n_groups
+
+        x_range = np.linspace(*x_range, 100)
+
+        # shape: (100, dim)
+        xs = x_range.reshape(-1, 1) * np.ones(dim).reshape(1, -1)
+        ys = np.stack([self.p_aucwin_fn(x) for x in xs])
+
+        fig = plt.figure(figsize=(10, 2 * dim))
+
+        for d in range(dim):
+            ax = plt.subplot(dim, 2, 2 * d + 1)
+            ax.plot(x_range, ys[:, d])
+            if const is not None:
+                label = f'{const_label} (p_ctr={self.p_ctr[d]:.3f})'
+                ax.axvline(const[d], c='k', linestyle='--', label=label)
+            ax.legend(loc='lower right')
+            if d == 0:
+                ax.set_title('Auction win probability')
+
+            ax = plt.subplot(dim, 2, 2 * d + 2)
+            ax.plot(x_range[:-1], np.diff(ys[:, d]))
+            if const is not None:
+                label = f'{const_label} (p_ctr={self.p_ctr[d]:.3f})'
+                ax.axvline(const[d], c='k', linestyle='--', label=label)
+            ax.legend(loc='upper right')
+            if d == 0:
+                ax.set_title('Win-bid distribution')
+
+        plt.tight_layout()
+
+        return fig
+
 
 class Optimizer:
-    """ Find optimal bids for a particular set of ad-auction groups
+    """ Find optimal bids for a particular set of ad-auction gr
 
-    :param groups: ad-auction groups
-    :param n_click: Desired number of ad clicks
+    :param groups: ad-auction gr
+    :param n_click: desired number of ad clicks
+    :param max_bid: maximum possible bid that we are willing to place
     """
 
-    def __init__(self, groups: AuctionGroups, n_click: float | int):
-        self.groups = groups
+    def __init__(
+            self,
+            groups: AuctionGroups,
+            n_click: float | int,
+            max_bid: float = 10.
+    ):
+        self.gr = groups
         self.n_click = n_click
+        self.max_bid = max_bid
         self._feasibility_check()
 
+    # TODO: take into account the maximum possible bid that we are willing to place
     def _feasibility_check(self):
         """ Feasibility check of the optimization problem """
 
         # Expected number of clicks if we win every auction
-        nc_max = (self.groups.n * self.groups.p_ctr).sum()
+        nc_max = (self.gr.n * self.gr.p_ctr).sum()
 
         assert self.n_click < nc_max, ("The desired amount of clicks is lower "
                                        "than the expected number of clicks if "
                                        "we win every auction.")
 
-    def f(self, x: np.ndarray):
-        """ Expected amount spent for won auctions """
+    def _initial_value_optimization(self):
+        """ Get the initial value for the optimization algorithm
 
-        return (self.groups.n * x * self.groups.p_win_fn(x)).sum()
+        Pick a value where the first derivative of the win-bid probability is
+        nearly maximal, i.e. the most common win-bid.
+        """
 
-    def g(self, x: np.ndarray):
-        """ Difference btw the desired and expected number of clicks based on a
-        bidding strategy
+        dim = self.gr.n_groups
+
+        search_range = np.linspace(0, self.max_bid, 100)
+
+        # shape: (100, dim)
+        xs = np.ones((1, dim)) * search_range.reshape(-1, 1)
+
+        # shape: (100, dim)
+        ys = np.stack([self.gr.p_aucwin_fn(x) for x in xs])
+
+        # shape: (99, dim)
+        ys_diff = np.diff(ys, axis=0)
+
+        # shape: (dim,)
+        indices = ys_diff.argmax(axis=0)
+
+        x0 = search_range[indices]
+
+        logger.info(f'Initial value: {x0}')
+
+        # x0 += np.random.rand() * .05
+        # x0 = x0.clip(0, self.max_bid)
+
+        return x0
+
+    def spending(self, x: np.ndarray):
+        """ Expected amount spent for won auctions
 
         Parameters
         ----------
         x: bids for every auction type
         """
 
-        n = (self.groups.n * self.groups.p_ctr * self.groups.p_win_fn(x)).sum()
+        return (self.gr.n * x * self.gr.p_aucwin_fn(x)).sum()
 
-        return n - self.n_click
+    def clicks(self, x: np.ndarray):
+        """ Expected number of clicks based on a bidding strategy
 
-    def optimize(self, x0: np.ndarray = None):
+        Parameters
+        ----------
+        x: bids for every auction type
+        """
+
+        n = (self.gr.n * self.gr.p_ctr * self.gr.p_aucwin_fn(x)).sum()
+
+        return n
+
+    def optimize(self, method='trust-constr'):
         """ Find optimal bids for the different auction types """
 
-        logger.info(f'Find the optimal bids for {len(self.groups.n)} auction '
-                    f'groups')
+        logger.info(
+            f'Find the optimal bids for {len(self.gr.n)} auction groups')
 
-        if x0 is None:
-            x0 = np.ones_like(self.groups.p_ctr)
+        dim = len(self.gr.p_ctr)
 
-        # Allowed ranges for the bids: (0, infinity)
-        bounds = [(0, None) for _ in self.groups.n]
+        # Lower and upper bid bounds: 0 <= bid <= max_bid
+        lb = np.zeros(dim)
+        ub = np.ones(dim) * self.max_bid
 
-        # Boundary condition: expected number of clicks = nc
-        cons = ({'type': 'eq', 'fun': self.g})
+        # Rescale trainable params such that they are of magnitude ~ 1
+        scale = self.max_bid
+        bounds = Bounds(lb=lb / scale,
+                        ub=ub / scale, keep_feasible=True)
 
-        args = {'method': 'trust-constr', 'bounds': bounds, 'constraints': cons}
-        res = minimize(fun=self.f, x0=x0, **args)
+        # Initial guess for the optimal bids
+        x0 = self._initial_value_optimization() / scale
+        logger.info(f'x0 scaled: {x0}')
+
+        # Boundary condition: expected = desired number of clicks
+        cons = ({'type': 'eq',
+                 'fun': lambda x: self.clicks(scale * x) - self.n_click})
+
+        res = minimize(fun=lambda x: self.spending(scale * x) / 1_000,
+                       x0=x0,
+                       method=method,
+                       bounds=bounds,
+                       constraints=cons,
+                       tol=1e-3)
+
+        # Map the results to the original scale
+        res.x *= scale
 
         return res

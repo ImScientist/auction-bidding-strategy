@@ -26,7 +26,7 @@ def cdf_from_samples(samples: np.ndarray) -> interp1d:
     return interp1d(x, y, bounds_error=False, fill_value=(0, 1))
 
 
-def winbid_prob_from_samples(
+def aucwin_prob_from_samples(
         samples_groups: list[np.ndarray],
         round_decimals: int = 2
 ):
@@ -44,19 +44,17 @@ def winbid_prob_from_samples(
     cdfs = [cdf_from_samples(samples=samples.round(round_decimals))
             for samples in samples_groups]
 
-    def p_win_fn(x: np.ndarray):
+    def p_aucwin_fn(x: np.ndarray):
         """ Probabilities to win different auctions by placing the bid x """
 
         assert x.ndim == 1
 
         return np.array([cdf(x_) for cdf, x_ in zip(cdfs, x)])
 
-    return p_win_fn
+    return p_aucwin_fn
 
 
-def winbid_prob_analytical(
-        dists: list[dict]
-):
+def aucwin_prob_analytical(dists: list[dict]):
     """ Create a map that maps every bid to a win probability for every
     auction group
 
@@ -72,14 +70,14 @@ def winbid_prob_analytical(
         winprice_dist = getattr(sp, dsit['dist_type'])(**dsit['dist_args'])
         cdfs.append(winprice_dist.cdf)
 
-    def p_win_fn(x: np.ndarray):
+    def p_aucwin_fn(x: np.ndarray):
         """ Probabilities to win different auctions by placing the bid x """
 
         assert x.ndim == 1
 
         return np.array([cdf(x_) for cdf, x_ in zip(cdfs, x)])
 
-    return p_win_fn
+    return p_aucwin_fn
 
 
 def generate_winbid_samples(
