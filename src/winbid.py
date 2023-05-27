@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+import pandas as pd
 import scipy.stats as sp
 from scipy.interpolate import interp1d
 
@@ -20,10 +21,12 @@ def cdf_from_samples(samples: np.ndarray) -> interp1d:
 
     assert samples.ndim == 1, "Provide a one-dimensional array of samples points"
 
-    x = np.sort(samples)
-    y = (np.arange(len(samples)) + 1) / len(samples)
+    df = pd.DataFrame()
+    df['x'] = np.sort(samples)
+    df['y'] = (np.arange(len(samples)) + 1) / len(samples)
+    df = df.groupby('x', as_index=False).agg(y=('y', max))
 
-    return interp1d(x, y, bounds_error=False, fill_value=(0, 1))
+    return interp1d(df['x'], df['y'], bounds_error=False, fill_value=(0, 1))
 
 
 def aucwin_prob_from_samples(

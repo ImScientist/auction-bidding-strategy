@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 from scipy.optimize import minimize, Bounds
 from typing import Callable
 from pydantic import BaseModel, root_validator
@@ -145,10 +146,9 @@ class Optimizer:
 
         x0 = search_range[indices]
 
-        logger.info(f'Initial value: {x0}')
-
-        # x0 += np.random.rand() * .05
-        # x0 = x0.clip(0, self.max_bid)
+        # jitter
+        x0 += np.random.rand() * .05
+        x0 = x0.clip(0, self.max_bid)
 
         return x0
 
@@ -174,7 +174,7 @@ class Optimizer:
 
         return n
 
-    def optimize(self, method='trust-constr'):
+    def optimize(self):
         """ Find optimal bids for the different auction types """
 
         logger.info(
@@ -193,20 +193,46 @@ class Optimizer:
 
         # Initial guess for the optimal bids
         x0 = self._initial_value_optimization() / scale
-        logger.info(f'x0 scaled: {x0}')
 
         # Boundary condition: expected = desired number of clicks
         cons = ({'type': 'eq',
-                 'fun': lambda x: self.clicks(scale * x) - self.n_click})
+                 'fun': lambda x: self.clicks(scale * x) / self.n_click - 1})
 
-        res = minimize(fun=lambda x: self.spending(scale * x) / 1_000,
-                       x0=x0,
-                       method=method,
-                       bounds=bounds,
-                       constraints=cons,
-                       tol=1e-3)
+        res = minimize(
+            fun=lambda x: self.spending(scale * x) / self.spending(ub),
+            x0=x0,
+            bounds=bounds,
+            constraints=cons,
+            options={'maxiter': 2_000},
+            tol=1e-6)
 
         # Map the results to the original scale
         res.x *= scale
+        res.clicks = self.clicks(res.x)
+        res.spending = self.spending(res.x)
 
         return res
+
+    def optimal_bid_strategy(self, trials: int = 10):
+        """ Find the optimal bid strategy """
+
+        results = [self.optimize() for _ in range(trials)]
+        results = [res for res in results if res.success]
+
+        summary = pd.DataFrame()
+        summary['results'] = [res.x for res in results]
+        summary['clicks'] = [res.clicks for res in results]
+        summary['spending'] = [res.spending for res in results]
+
+        for i in range(self.gr.n_groups):
+            summary[f'b{i}'] = [res.x[i] for res in results]
+
+        summary = summary.sort_values(by=['spending'])
+
+        logger.info(f'Summary: {summary.drop(["results"], axis=1).round(2)}')
+
+        assert len(summary) > 0, "No successful optimization"
+
+        bid = summary['results'].values[0]
+
+        return bid
