@@ -97,6 +97,6 @@ More examples are provided in this [Jupyter notebook](Example.ipynb).
 ## Original solution
 
 
-The code used for the solution of the problem described in [this blog post](https://medium.com/ki-labs-engineering/an-ad-auction-bidding-strategy-cd8f95d77d50) can be found in this [release](TODO)
+The code used for the solution of the problem described in [this blog post](https://medium.com/ki-labs-engineering/an-ad-auction-bidding-strategy-cd8f95d77d50) can be found in this [release](https://github.com/ImScientist/auction-bidding-strategy/tree/v1.0.0)
 
 <img width="600" alt="teaser" src="./pdf/fig/biding_strategy.png">
