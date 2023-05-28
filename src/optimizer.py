@@ -65,7 +65,7 @@ class AuctionGroups(BaseModel):
         xs = x_range.reshape(-1, 1) * np.ones(dim).reshape(1, -1)
         ys = np.stack([self.p_aucwin_fn(x) for x in xs])
 
-        fig = plt.figure(figsize=(10, 2 * dim))
+        fig = plt.figure(figsize=(8, 2 * dim))
 
         for d in range(dim):
             ax = plt.subplot(dim, 2, 2 * d + 1)

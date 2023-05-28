@@ -34,7 +34,7 @@ $\{n_m\vert m\in\mathcal{M}\}$ and ctr probabilities $\{p_{ctr,m} \vert m\in\mat
 can be easily inferred from past events. To obtain the probability to win an auction we 
 have implemented two options:
 
-- Construct it directly from the winning-bids $\{s_i\vert i\in\mathcal{I}\}$ from past auctions of this type:
+- Construct it directly from the winning-bids $\{s_i\vert i\in\mathcal{I}\}$ from past auctions of this type ($\Theta(x) = 0$ if $x>0$ and $0$ otherwise):
 
 
 $$  
