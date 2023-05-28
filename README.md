@@ -14,7 +14,7 @@ The ad auctions can be put into several groups based on:
 
 The optimal bids for the different auction groups are obtained by the constrained optimization
 problem where we have to minimize the expected spent budget $f(x)$ given that the difference 
-between expected number of generated ad-clicks and $n_{click}$ $g(x)$ is zero:
+between expected number of generated ad-clicks and $n_{click}$, $g(x)$, is zero:
 
 
 $$  
