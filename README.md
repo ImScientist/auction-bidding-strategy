@@ -30,27 +30,27 @@ auctions that belong to this group.
 
 
 We assume that the number of auction groups $\mathcal{M}$, group sizes 
-$\{n_m\vert m\in\mathcal{M}\}$ and ctr probabilities $\{p_{ctr,m} \vert m\in\mathcal{M} \}$ 
+$\lbrace n_m\vert m\in\mathcal{M}\rbrace$ and ctr probabilities $\lbrace p_{ctr,m} \vert m\in\mathcal{M} \rbrace$ 
 can be easily inferred from past events. To obtain the probability to win an auction we 
 have implemented two options:
 
-- Construct it directly from the winning-bids $\{s_i\vert i\in\mathcal{I}\}$ from past auctions of this type ($\Theta(x) = 0$ if $x>0$ and $0$ otherwise):
+- Construct it directly from the winning-bids $\lbrace s_i\vert i\in\mathcal{I} \rbrace$ from past auctions of this type ($\Theta(x) = 0$ if $x>0$ and $0$ otherwise):
 
 
-$$  
-\begin{align*}  
-p_{aucwin} (x) & = \sum^{}_{i\in \mathcal{I}} \Theta(b_i < x) \Big/ \sum^{}_{i\in \mathcal{I}} 1,  
-\end{align*}  
+$$
+\begin{align*}
+p_{aucwin} (x) & = \sum_{i\in \mathcal{I}} \Theta(b_i < x) \Big/  \sum_{i\in \mathcal{I}}  1,
+\end{align*}
 $$
 
 
 - Use the cumulative distribution function of an analytical function for the distribution of winning bids $p_{winbid}$ obtained, for example, through some variational inference approach:
 
 
-$$    
-\begin{align*}    
-p_{aucwin} (x) & = \int^{x}_{0} p_{winbid} (b) \cdot db  
-\end{align*}    
+$$
+\begin{align*}
+p_{aucwin}(x) & = \int^{x}_{0} p_w (b) \cdot db 
+\end{align*}
 $$
 
 
