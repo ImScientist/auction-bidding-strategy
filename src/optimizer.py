@@ -103,7 +103,7 @@ class Optimizer:
             self,
             groups: AuctionGroups,
             n_click: float | int,
-            max_bid: float = 10.
+            max_bid: float = 5.
     ):
         self.gr = groups
         self.n_click = n_click
@@ -229,7 +229,8 @@ class Optimizer:
 
         summary = summary.sort_values(by=['spending'])
 
-        logger.info(f'Summary: {summary.drop(["results"], axis=1).round(2)}')
+        logger.info('Summary: \n\n'
+                    f'{summary.drop(["results"], axis=1).round(2)}\n')
 
         assert len(summary) > 0, "No successful optimization"
 

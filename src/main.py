@@ -26,12 +26,12 @@ def cli():
     type=str,
     default=
     '['
-    '{"dist_type": "exponpow", "dist_args": {"b": 2}, "samples": 10000},'
-    '{"dist_type": "exponpow", "dist_args": {"b": 2}, "samples": 10000},'
-    '{"dist_type": "exponpow", "dist_args": {"b": 4}, "samples": 10000},'
-    '{"dist_type": "exponpow", "dist_args": {"b": 4}, "samples": 10000},'
-    '{"dist_type": "exponpow", "dist_args": {"b": 6}, "samples": 10000},'
-    '{"dist_type": "exponpow", "dist_args": {"b": 6}, "samples": 10000}'
+    '{"name": "exponpow", "params": {"b": 2}, "samples": 10000},'
+    '{"name": "exponpow", "params": {"b": 2}, "samples": 10000},'
+    '{"name": "exponpow", "params": {"b": 4}, "samples": 10000},'
+    '{"name": "exponpow", "params": {"b": 4}, "samples": 10000},'
+    '{"name": "exponpow", "params": {"b": 6}, "samples": 10000},'
+    '{"name": "exponpow", "params": {"b": 6}, "samples": 10000}'
     ']',
     help='Combinations of CTR probabilities, expected number of incoming '
          'requests, and auction winning bid distributions')
@@ -41,13 +41,13 @@ def cli():
     default='data.json',
     help='Path to store the generated data')
 def generate_data(winbid_dist, save_path):
-    """ Generate win-bid samples for different ad-auction gr """
+    """ Generate win-bid samples for different ad-auction groups """
 
     winbid_dist = json.loads(winbid_dist)
 
-    logger.info(f'Generate data for the following distributions:\n{winbid_dist}')
+    logger.info(f'Generate data for win-bid distributions...')
 
-    data = [{'winbid_samples': generate_winbid_samples(**dist)}
+    data = [{'winbid_samples': generate_winbid_samples(**dist).tolist()}
             for dist in winbid_dist]
 
     logger.info(f'Store data in {save_path}.')
@@ -76,12 +76,12 @@ def generate_data(winbid_dist, save_path):
     type=str,
     default=
     '['
-    '{"dist_type": "exponpow", "dist_args": {"b": 2}},'
-    '{"dist_type": "exponpow", "dist_args": {"b": 2}},'
-    '{"dist_type": "exponpow", "dist_args": {"b": 4}},'
-    '{"dist_type": "exponpow", "dist_args": {"b": 4}},'
-    '{"dist_type": "exponpow", "dist_args": {"b": 6}},'
-    '{"dist_type": "exponpow", "dist_args": {"b": 6}}'
+    '{"name": "exponpow", "params": {"b": 2}},'
+    '{"name": "exponpow", "params": {"b": 2}},'
+    '{"name": "exponpow", "params": {"b": 4}},'
+    '{"name": "exponpow", "params": {"b": 4}},'
+    '{"name": "exponpow", "params": {"b": 6}},'
+    '{"name": "exponpow", "params": {"b": 6}}'
     ']',
     help=
     'Winning bid distributions per auction group. Depending on the '
@@ -98,18 +98,18 @@ def optimize(n_click, p_ctr, n, winbid_dist, winbid_dist_analytical):
     bidding strategy """
 
     if winbid_dist_analytical:
-        logger.info(f'Use the explicitly defined win-bid distributions: {winbid_dist}')
+        logger.info('Use explicitly defined win-bid distributions')
 
         # Fn that maps bids for different auction types to winning probabilities
-        p_win_fn = aucwin_prob_analytical(dists=json.loads(winbid_dist))
+        p_aucwin_fn = aucwin_prob_analytical(dists=json.loads(winbid_dist))
     else:
-        logger.info(f'Load samples of the win-bid distributions from: {winbid_dist}')
+        logger.info(f'Load samples of the win-bid distributions from {winbid_dist}')
 
         with open(winbid_dist, "r") as f:
             data = json.load(f)
 
         # Fn that maps bids for different auction types to winning probabilities
-        p_win_fn = aucwin_prob_from_samples(
+        p_aucwin_fn = aucwin_prob_from_samples(
             samples_groups=[np.array(x['winbid_samples']) for x in data])
 
     # Click-through probabilities
@@ -118,39 +118,18 @@ def optimize(n_click, p_ctr, n, winbid_dist, winbid_dist_analytical):
     # Expected number of auctions per auction type
     n = np.array([float(x) for x in n.split(',')])
 
-    groups = AuctionGroups(p_ctr=p_ctr, n=n, p_win_fn=p_win_fn)
+    groups = AuctionGroups(p_ctr=p_ctr, n=n, p_aucwin_fn=p_aucwin_fn)
     optimizer = Optimizer(groups=groups, n_click=n_click)
-    res = optimizer.optimize()
+    bid = optimizer.optimal_bid_strategy()
+
+    # Plot the optimal solution
+    fig = groups.plot(x_range=(0, optimizer.max_bid), const=bid, const_label='bid')
+    fig.savefig('solution.png', dpi=300, bbox_inches='tight')
+
+    logger.info(f'Optimal bid: {bid.round(2)}')
+    logger.info('Figure stored in solution.png')
 
 
 if __name__ == "__main__":
-    """
-    PYTHONPATH=src python src/main.py --help
-
-    # Infer winbid distributions from samples from different ad-auction gr
-    PYTHONPATH=src python src/main.py generate-data --save-path='data.json'
-    PYTHONPATH=src python src/main.py optimize --winbid-dist='data.json'
-        
-    # Define winbid distributions explicitly
-    PYTHONPATH=src python src/main.py optimize \
-      --n-click=100 \
-      --p-ctr='0.01, 0.02' \
-      --n='20_000, 10_000' \
-      --winbid-dist='[{"dist_type": "exponpow", "dist_args": {"b": 2}}, {"dist_type": "exponpow", "dist_args": {"b": 2}}]' \
-      --winbid-dist-analytical
-
-
-
-    PYTHONPATH=src python src/main.py optimize --winbid-dist='data.json'
-
-    # Define winbid distributions explicitly
-    PYTHONPATH=src python src/main.py optimize --winbid-dist-analytical
-    
-    PYTHONPATH=$(pwd) python src/main.py optimize \
-        --model_wrapper=ModelPDF \
-        --model_args='{"l2": 0.0001, "batch_normalization": false, "layer_sizes": [64, [64, 64], [64, 64], 32, 8]}' \
-        --ds_args='{"max_files": 2}' \
-        --callbacks_args='{"period": 100, "profile_batch": 0}' \
-        --training_args='{"epochs": 3000}'
-    """
+    """ PYTHONPATH=src python src/main.py --help """
     cli()

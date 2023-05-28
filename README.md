@@ -10,7 +10,7 @@ in [this document](pdf/bidding_strategy.pdf).
 
 To execute the optimization algorithm run either:
 ```shell script
-python main.py --distribution_type exponpow
+python main.py --name exponpow
 ```
 or use the [Jupyter notebook](Example.ipynb).
 

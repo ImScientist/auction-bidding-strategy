@@ -64,13 +64,13 @@ def aucwin_prob_analytical(dists: list[dict]):
     Parameters
     ----------
     dists: list of distribution definitions;
-        dicts with keys `dist_type` and `dist_args`
+        dicts with keys `name` and `params`
     """
 
     # Probability to win an auction from the CDF of the win-price distribution
     cdfs = []
     for dsit in dists:
-        winprice_dist = getattr(sp, dsit['dist_type'])(**dsit['dist_args'])
+        winprice_dist = getattr(sp, dsit['name'])(**dsit['params'])
         cdfs.append(winprice_dist.cdf)
 
     def p_aucwin_fn(x: np.ndarray):
@@ -84,20 +84,20 @@ def aucwin_prob_analytical(dists: list[dict]):
 
 
 def generate_winbid_samples(
-        dist_type: str,
-        dist_args: dict,
+        name: str,
+        params: dict,
         samples: int = 10_000
 ) -> np.ndarray:
     """ Generate samples from a win-bid distribution
 
     Parameters
     ----------
-    dist_type: distribution from scipy.stats (for example 'expon')
-    dist_args:
+    name: distribution from scipy.stats (for example 'expon')
+    params: distribution parameters
     samples: desired number of samples
     """
 
-    winbid_dist = getattr(sp, dist_type)(**dist_args)
+    winbid_dist = getattr(sp, name)(**params)
     samples = winbid_dist.rvs(size=samples)
 
     return samples
