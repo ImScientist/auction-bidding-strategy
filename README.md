@@ -91,7 +91,7 @@ is used as a final result.
       --winbid-dist='data.json'
   ``` 
 
-More examples are provided in this [Jupyter notebook](Example.ipynb).
+More examples are provided in this [Jupyter notebook](example.ipynb) and can be tested in [this google colab notebook](https://colab.research.google.com/drive/1zTOFtF0H6-n2HPw3FiC3kFpvsr44aFJc?usp=sharing)
 
 
 ## Original solution
