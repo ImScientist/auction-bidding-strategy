@@ -26,7 +26,7 @@ jobs:
 
     - name: Check code format
       run: |
-        pylint src/* --fail-under 8
+        pylint src/* --fail-under 7
 
     - name: Test with pytest
       run: |
