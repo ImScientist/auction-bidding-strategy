@@ -31,10 +31,10 @@ auctions that belong to this group.
 
 We assume that the number of auction groups $\mathcal{M}$, group sizes 
 $\lbrace n_m\vert m\in\mathcal{M}\rbrace$ and ctr probabilities $\lbrace p_{ctr,m} \vert m\in\mathcal{M} \rbrace$ 
-can be easily inferred from past events. To obtain the probability to win an auction we 
+can be easily inferred from past events. To obtain the probability of winning an auction we 
 have implemented two options:
 
-- Construct it directly from the winning-bids $\lbrace s_i\vert i\in\mathcal{I} \rbrace$ from past auctions of this type ($\Theta(x) = 0$ if $x>0$ and $0$ otherwise):
+- Construct it directly from the winning-bids $\lbrace s_i\vert i\in\mathcal{I} \rbrace$ from past auctions of this type ($\Theta(x) = 1$ if $x>0$ and $0$ otherwise):
 
 
 $$
