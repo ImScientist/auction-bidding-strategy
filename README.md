@@ -1,6 +1,9 @@
 # Ad auction bidding strategy
 
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1zTOFtF0H6-n2HPw3FiC3kFpvsr44aFJc?usp=sharing)
+
+
 ## Theory 
 
 Consider the case of participating in `N ≫ 1` online ad auctions with a limited bidding 
